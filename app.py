@@ -274,43 +274,74 @@ def render_symbol(payload: dict, symbol: str) -> None:
     flow  = m.get("flow", 0.0)
     oi_ch = m.get("oiChange", 0.0)
 
-    # ── Top metric row (coloured blocks) ───────────────────────────
-    bb_color = "#22d3ee" if bb_lb == "squeeze" else "#ef4444" if bb_lb == "expanded" else "#e5e7eb"
-    sq_color = "#22d3ee" if sq else "#64748b"
+    bb_color   = "#22d3ee" if bb_lb == "squeeze" else "#ef4444" if bb_lb == "expanded" else "#e5e7eb"
     flow_color = "#22c55e" if flow > CFG["FLOW_STRONG"] else "#ef4444" if flow < -CFG["FLOW_STRONG"] else "#fbbf24"
-    oi_color = "#22c55e" if oi_ch > 0 else "#ef4444"
+    oi_color   = "#22c55e" if oi_ch > 0 else "#ef4444"
+    str_color  = "#22c55e" if str4h == "Bullish" else "#ef4444" if str4h == "Bearish" else "#94a3b8"
+    rng_color  = "#22c55e" if direction["type"] == "Long" else "#ef4444" if direction["type"] == "Short" else "#fbbf24"
+    fund_color = "#fbbf24" if abs(fund) > 0.05 else "#22c55e"
 
-    cols = st.columns(8)
-    cols[0].markdown(mblock("Price",      f"{price:,.4f}",        "#f8fafc"), unsafe_allow_html=True)
-    cols[1].markdown(mblock("RSI 4H",     f"{rsi:.1f}",           rsi_color(rsi)), unsafe_allow_html=True)
-    cols[2].markdown(mblock("ATR %",      f"{atr_p:.2f}%",        "#fbbf24" if atr_p > 3 else "#94a3b8"), unsafe_allow_html=True)
-    cols[3].markdown(mblock("ADX",        f"{adx_v:.1f}",         adx_color(adx_v)), unsafe_allow_html=True)
-    cols[4].markdown(mblock("BB BW",      f"{bb_bw:.2f}%",        bb_color), unsafe_allow_html=True)
-    cols[5].markdown(mblock("Struct 4H",  str4h,                  "#22c55e" if str4h=="Bullish" else "#ef4444" if str4h=="Bearish" else "#94a3b8"), unsafe_allow_html=True)
-    cols[6].markdown(mblock("Squeeze",    "YES" if sq else "no",  sq_color), unsafe_allow_html=True)
-    cols[7].markdown(mblock("Flow 24h",   f"{flow:+.1f}%",        flow_color), unsafe_allow_html=True)
+    cls        = score_cls(score)
+    dir_chip_h = direction_chip(direction["type"])
+    via_chip_h = chip("VIABLE", "green") if via["viable"] else chip("BLOCKED", "red")
+    sq_chip_h  = chip("SQUEEZE", "cyan") if sq else ""
 
-    st.write("")
+    sl           = calc_grid_stop_loss(rng["rangeLow"], prof_name)
+    tp           = calc_grid_take_profit(rng["rangeHigh"], prof_name)
+    profit       = calc_grid_profit_per_grid(
+        rng["rangeHigh"], rng["rangeLow"], grid_count["recommended"],
+        is_geometric=(mode["mode"] == "Geometric"),
+    )
+    cap_per_grid = calc_grid_capital_per_grid(capital, grid_count["recommended"])
 
-    # ── Score + direction + viability ──────────────────────────────
-    left, right = st.columns([1.15, 1])
+    # ── Compact header (always visible) ────────────────────────────
+    st.markdown(
+        f"<div class='card'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem'>"
+        f"<div>"
+        f"<span class='metric-big {cls}'>{score:.1f}</span>"
+        f"<span style='font-size:.9rem;color:#8b93a7'> / 10 &nbsp;{score_info['label']}</span>"
+        f"<div style='margin:.3rem 0;display:flex;flex-wrap:wrap;gap:.3rem'>"
+        f"{dir_chip_h} {via_chip_h} {sq_chip_h}"
+        f"</div>"
+        f"</div>"
+        f"<div style='text-align:right'>"
+        f"<div style='font-size:1.05rem;font-weight:600;color:#f8fafc'>{price:,.4f}"
+        f"<span style='font-size:.72rem;color:#64748b'> USDT</span></div>"
+        f"<div style='font-size:.8rem;color:{str_color};margin-top:.2rem'>Struct: {str4h}</div>"
+        f"</div>"
+        f"</div>"
+        f"<div style='margin-top:.45rem;font-size:.84rem'>"
+        f"<span style='color:#8b93a7'>Range </span>"
+        f"<span style='color:{rng_color};font-weight:600'>{rng['rangeLow']:,.4f} – {rng['rangeHigh']:,.4f}</span>"
+        f"<span style='color:#64748b'> &nbsp;{rng['rangeWidthPct']:.1f}% · {grid_count['recommended']} grids"
+        f" · {mode['mode']} · ~{duration['label']}</span>"
+        f"</div>"
+        f"<div style='font-size:.75rem;color:#64748b;margin-top:.2rem'>{direction['reason']}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-    with left:
-        cls = score_cls(score)
-        dir_chip_html = direction_chip(direction["type"])
-        via_chip_html = chip("VIABLE", "green") if via["viable"] else chip("BLOCKED", "red")
+    # ── Full analysis expander ──────────────────────────────────────
+    with st.expander("Full analysis"):
 
-        st.markdown(
-            f"<div class='card'>"
-            f"<div class='metric-sub'>Grid Score</div>"
-            f"<div class='metric-big {cls}'>{score:.1f} / 10</div>"
-            f"<div style='margin:.35rem 0'>{score_chip(score, score_info['label'])} &nbsp; {dir_chip_html} &nbsp; {via_chip_html}</div>"
-            f"<div class='metric-sub'>{direction['reason']}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+        # 4 + 4 metric blocks
+        r1 = st.columns(4)
+        r1[0].markdown(mblock("RSI 4H",   f"{rsi:.1f}",          rsi_color(rsi)), unsafe_allow_html=True)
+        r1[1].markdown(mblock("ATR %",    f"{atr_p:.2f}%",       "#fbbf24" if atr_p > 3 else "#94a3b8"), unsafe_allow_html=True)
+        r1[2].markdown(mblock("ADX",      f"{adx_v:.1f}",        adx_color(adx_v)), unsafe_allow_html=True)
+        r1[3].markdown(mblock("BB BW",    f"{bb_bw:.2f}%",       bb_color), unsafe_allow_html=True)
 
-        # Component breakdown with mini colour bars
+        r2 = st.columns(4)
+        r2[0].markdown(mblock("Flow 24h", f"{flow:+.1f}%",       flow_color), unsafe_allow_html=True)
+        r2[1].markdown(mblock("OI 7d",    f"{oi_ch:+.1f}%",      oi_color), unsafe_allow_html=True)
+        r2[2].markdown(mblock("Funding",  f"{fund:+.4f}%",       fund_color), unsafe_allow_html=True)
+        r2[3].markdown(mblock("Net/grid", f"{profit['netPct']*100:.3f}%",
+                               "#22c55e" if profit["isViable"] else "#ef4444"), unsafe_allow_html=True)
+
+        st.write("")
+
+        # Score component bars + missing hints
         for comp in score_info["components"]:
             ratio = comp["score"] / comp["max"] if comp["max"] else 0
             bar_color = comp_bar_color(ratio)
@@ -327,155 +358,108 @@ def render_symbol(payload: dict, symbol: str) -> None:
             )
 
         if score_info["recs"]:
-            recs_html = "".join(
-                f"<div style='font-size:.76rem;color:#fbbf24;margin:.1rem 0'>▸ {r}</div>"
-                for r in score_info["recs"]
+            st.markdown(
+                "".join(f"<div style='font-size:.76rem;color:#fbbf24;margin:.1rem 0'>▸ {r}</div>"
+                        for r in score_info["recs"]),
+                unsafe_allow_html=True,
             )
-            st.markdown(recs_html, unsafe_allow_html=True)
 
-    with right:
-        # Viability
-        st.markdown(
-            f"<div class='card'>"
-            f"<div class='metric-sub'>Viability &nbsp; {via_chip_html}</div>"
-            f"<div style='margin:.3rem 0;font-size:.88rem'>{via['reason']}</div>"
-            + (
-                "".join(f"<div style='margin:.15rem 0'>{chip(w, 'yellow')}</div>"
-                         for w in via["warning"].split(" | "))
-                if via.get("warning") else ""
-            )
-            + "</div>",
-            unsafe_allow_html=True,
-        )
+        st.write("")
 
-        # Range + grid
-        mode_chip = chip(mode["mode"], "cyan")
-        dir_type  = direction["type"]
-        range_color = "#22c55e" if dir_type == "Long" else "#ef4444" if dir_type == "Short" else "#fbbf24"
-        st.markdown(
-            f"<div class='card'>"
-            f"<div class='metric-sub'>Grid Range &nbsp; {mode_chip}</div>"
-            f"<div style='font-size:1.05rem;font-weight:600;color:{range_color};margin:.25rem 0'>"
-            f"{rng['rangeLow']:,.4f} – {rng['rangeHigh']:,.4f}</div>"
-            f"<div style='font-size:.85rem;color:#8b93a7'>"
-            f"Width: <b style='color:#e5e7eb'>{rng['rangeWidthPct']:.2f}%</b> &nbsp;·&nbsp; "
-            f"Grids: <b style='color:#e5e7eb'>{grid_count['recommended']}</b> "
-            f"<span style='color:#475569'>(min {grid_count['min']} max {grid_count['max']})</span> &nbsp;·&nbsp; "
-            f"Est: <b style='color:#e5e7eb'>{duration['label']}</b></div>"
-            f"<div style='font-size:.75rem;color:#475569;margin-top:.3rem'>{mode['reason']}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-        # CVD row
+        # Viability + CVD merged
         def cvd_badge(v: float, tf: str) -> str:
             c = "#22c55e" if v > 0 else "#ef4444"
-            lbl = "ACC" if v > 0 else "DIS"
-            return f"<span style='color:{c};font-weight:600'>{tf} {lbl}</span>"
+            return f"<span style='color:{c};font-weight:600'>{tf} {'ACC' if v > 0 else 'DIS'}</span>"
 
+        warn_html = (f" &nbsp;<span style='color:#fbbf24'>{via['warning']}</span>"
+                     if via.get("warning") else "")
         st.markdown(
             f"<div class='card'>"
-            f"<div class='metric-sub'>CVD Alignment</div>"
-            f"<div style='display:flex;gap:.75rem;margin:.25rem 0;font-size:.88rem'>"
-            f"{cvd_badge(cvd5, '5d')} {cvd_badge(cvd14, '14d')} {cvd_badge(cvd30, '30d')}"
-            f"</div>"
-            f"<div style='font-size:.78rem;color:#64748b'>"
-            f"OI 7d: <b style='color:{'#22c55e' if oi_ch>0 else '#ef4444'}'>{oi_ch:+.1f}%</b> &nbsp; "
-            f"Funding: <b style='color:{'#fbbf24' if abs(fund)>0.05 else '#22c55e'}'>{fund:+.4f}%</b>"
+            f"<div style='font-size:.82rem;margin-bottom:.3rem'>"
+            f"{via_chip_h} {via['reason']}{warn_html}</div>"
+            f"<div style='display:flex;gap:.75rem;flex-wrap:wrap;font-size:.87rem'>"
+            f"{cvd_badge(cvd5,'5d')} {cvd_badge(cvd14,'14d')} {cvd_badge(cvd30,'30d')}"
+            f"<span style='color:#64748b'>OI <b style='color:{oi_color}'>{oi_ch:+.1f}%</b>"
+            f" · Fund <b style='color:{fund_color}'>{fund:+.4f}%</b></span>"
             f"</div></div>",
             unsafe_allow_html=True,
         )
 
-    st.markdown("---")
+        # FVG compact
+        fvg_list = m.get("fvgList", [])
+        if fvg_list:
+            fvg_cols = st.columns(min(len(fvg_list), 5))
+            for i, g in enumerate(fvg_list[:5]):
+                c = "green" if g["type"] == "BULL" else "red"
+                dist = abs(price - g["mid"]) / price * 100 if price else 0
+                with fvg_cols[i]:
+                    st.markdown(
+                        f"<div class='card' style='padding:.5rem .7rem;text-align:center'>"
+                        f"{chip(g['type']+' FVG', c)}"
+                        f"<div style='font-size:.76rem;color:#94a3b8;margin-top:.25rem'>"
+                        f"{g['bottom']:,.4f}–{g['top']:,.4f}</div>"
+                        f"<div style='font-size:.72rem;color:#64748b'>dist {dist:.1f}%</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+            st.write("")
 
-    # ── FVG list ───────────────────────────────────────────────────
-    fvg_list = m.get("fvgList", [])
-    if fvg_list:
-        fvg_cols = st.columns(min(len(fvg_list), 5))
-        for i, g in enumerate(fvg_list[:5]):
-            c = "green" if g["type"] == "BULL" else "red"
-            dist = abs(price - g["mid"]) / price * 100 if price else 0
-            with fvg_cols[i]:
-                st.markdown(
-                    f"<div class='card' style='padding:.6rem .8rem;text-align:center'>"
-                    f"<div>{chip(g['type'] + ' FVG', c)}</div>"
-                    f"<div style='font-size:.8rem;color:#94a3b8;margin-top:.3rem'>"
-                    f"{g['bottom']:,.4f}–{g['top']:,.4f}</div>"
-                    f"<div style='font-size:.75rem;color:#64748b'>dist {dist:.2f}% · size {g['sizePct']:.2f}%</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+        # Capital / SL / TP
+        p1, p2, p3 = st.columns(3)
+        p1.markdown(mblock("Capital/grid",      f"{cap_per_grid:,.2f} USDT", "#94a3b8"), unsafe_allow_html=True)
+        p2.markdown(mblock(f"SL ({prof_name})", f"{sl:,.4f}",                "#ef4444"), unsafe_allow_html=True)
+        p3.markdown(mblock(f"TP ({prof_name})", f"{tp:,.4f}",                "#22c55e"), unsafe_allow_html=True)
 
         st.write("")
 
-    # ── Profit / risk row ──────────────────────────────────────────
-    profit      = calc_grid_profit_per_grid(
-        rng["rangeHigh"], rng["rangeLow"], grid_count["recommended"],
-        is_geometric=(mode["mode"] == "Geometric"),
-    )
-    cap_per_grid = calc_grid_capital_per_grid(capital, grid_count["recommended"])
-    sl = calc_grid_stop_loss(rng["rangeLow"], prof_name)
-    tp = calc_grid_take_profit(rng["rangeHigh"], prof_name)
-    net_color = "#22c55e" if profit["isViable"] else "#ef4444"
+        # Drawdown slider
+        crash_pct = st.slider(
+            f"Crash % · {symbol}", min_value=5, max_value=60, value=20, step=5,
+            key=f"crash-{symbol}",
+        )
+        crash_price = price * (1 - crash_pct / 100)
+        dd = calc_drawdown_scenario(capital, rng["rangeLow"], price, crash_price)
+        dd_pct = dd["drawdownPct"] * 100
+        dd_color = "#ef4444" if dd_pct > 40 else "#fbbf24" if dd_pct > 20 else "#22c55e"
 
-    p1, p2, p3, p4 = st.columns(4)
-    p1.markdown(mblock("Net / grid",        f"{profit['netPct']*100:.3f}%", net_color),    unsafe_allow_html=True)
-    p2.markdown(mblock("Capital / grid",    f"{cap_per_grid:,.2f} USDT",   "#94a3b8"),     unsafe_allow_html=True)
-    p3.markdown(mblock(f"SL ({prof_name})", f"{sl:,.4f}",                  "#ef4444"),     unsafe_allow_html=True)
-    p4.markdown(mblock(f"TP ({prof_name})", f"{tp:,.4f}",                  "#22c55e"),     unsafe_allow_html=True)
+        d1, d2, d3 = st.columns(3)
+        d1.markdown(mblock("Coins held",   f"{dd['coinsHeld']:,.4f}",                    "#94a3b8"), unsafe_allow_html=True)
+        d2.markdown(mblock("Value@crash",  f"{dd['valueAtCrash']:,.2f} USDT",            "#fbbf24"), unsafe_allow_html=True)
+        d3.markdown(mblock("Drawdown",     f"{dd['drawdownUSDT']:,.2f} ({dd_pct:.1f}%)", dd_color),  unsafe_allow_html=True)
 
-    st.write("")
+        st.write("")
 
-    # ── Drawdown slider ────────────────────────────────────────────
-    crash_pct = st.slider(
-        f"Crash % · {symbol}", min_value=5, max_value=60, value=20, step=5,
-        key=f"crash-{symbol}",
-    )
-    crash_price = price * (1 - crash_pct / 100)
-    dd = calc_drawdown_scenario(capital, rng["rangeLow"], price, crash_price)
-    dd_pct = dd["drawdownPct"] * 100
-    dd_color = "#ef4444" if dd_pct > 40 else "#fbbf24" if dd_pct > 20 else "#22c55e"
-
-    d1, d2, d3 = st.columns(3)
-    d1.markdown(mblock("Coins held",   f"{dd['coinsHeld']:,.4f}",     "#94a3b8"), unsafe_allow_html=True)
-    d2.markdown(mblock("Value @ crash",f"{dd['valueAtCrash']:,.2f} USDT", "#fbbf24"), unsafe_allow_html=True)
-    d3.markdown(mblock("Drawdown",     f"{dd['drawdownUSDT']:,.2f} USDT ({dd_pct:.1f}%)", dd_color), unsafe_allow_html=True)
-
-    # ── Pionex action cards ────────────────────────────────────────
-    st.markdown("### Recommended Pionex Action")
-    a1, a2, a3 = st.columns(3)
-    for col, label, kind in (
-        (a1, "Long Grid",    "Long"),
-        (a2, "Neutral Grid", "Neutral"),
-        (a3, "Short Grid",   "Short"),
-    ):
-        active    = direction["type"] == kind and via["viable"]
-        card_cls  = ("card-active-long" if kind == "Long"
-                     else "card-active-short" if kind == "Short"
-                     else "card-active-neut") if active else ""
-        badge     = chip("RECOMMENDED", "green") if active else chip("not now", "grey")
-        hdr_color = "#22c55e" if kind == "Long" else "#ef4444" if kind == "Short" else "#fbbf24"
-        with col:
+        # Recommended action — 1 card only
+        if via["viable"]:
+            act      = direction["type"]
+            hdr_c    = "#22c55e" if act == "Long" else "#ef4444" if act == "Short" else "#fbbf24"
+            card_cls = ("card-active-long" if act == "Long"
+                        else "card-active-short" if act == "Short" else "card-active-neut")
             st.markdown(
                 f"<div class='card {card_cls}'>"
-                f"<h3 style='color:{hdr_color}'>{label}</h3>"
-                f"<div style='margin:.3rem 0'>{badge}</div>"
-                f"<div style='font-size:.85rem;color:#8b93a7'>"
-                f"Range: <b style='color:{hdr_color}'>{rng['rangeLow']:,.4f} – {rng['rangeHigh']:,.4f}</b><br>"
-                f"Grids: <b style='color:#e5e7eb'>{grid_count['recommended']}</b> · {mode['mode']}<br>"
-                f"Capital: <b style='color:#e5e7eb'>{capital:,.0f} USDT</b><br>"
-                f"SL <span style='color:#ef4444'>{sl:,.4f}</span> · "
-                f"TP <span style='color:#22c55e'>{tp:,.4f}</span>"
+                f"<div style='margin-bottom:.3rem'>"
+                f"<b style='color:{hdr_c}'>{act} Grid</b> &nbsp;{chip('RECOMMENDED','green')}</div>"
+                f"<div style='font-size:.84rem;color:#8b93a7'>"
+                f"Range <b style='color:{hdr_c}'>{rng['rangeLow']:,.4f} – {rng['rangeHigh']:,.4f}</b>"
+                f" &nbsp;Grids <b style='color:#e5e7eb'>{grid_count['recommended']}</b> · {mode['mode']}<br>"
+                f"Capital <b style='color:#e5e7eb'>{capital:,.0f} USDT</b>"
+                f" &nbsp;SL <span style='color:#ef4444'>{sl:,.4f}</span>"
+                f" &nbsp;TP <span style='color:#22c55e'>{tp:,.4f}</span>"
                 f"</div></div>",
                 unsafe_allow_html=True,
             )
-            if active:
-                copy_text = (
-                    f"{symbol} | {label} | {rng['rangeLow']:.4f}-{rng['rangeHigh']:.4f} | "
-                    f"{grid_count['recommended']} grids | {mode['mode']} | "
-                    f"{capital:.0f} USDT | SL {sl:.4f} | TP {tp:.4f}"
-                )
-                st.code(copy_text, language="text")
+            st.code(
+                f"{symbol} | {act} Grid | {rng['rangeLow']:.4f}-{rng['rangeHigh']:.4f} | "
+                f"{grid_count['recommended']} grids | {mode['mode']} | "
+                f"{capital:.0f} USDT | SL {sl:.4f} | TP {tp:.4f}",
+                language="text",
+            )
+        else:
+            st.markdown(
+                f"<div style='font-size:.84rem;color:#64748b;padding:.4rem 0'>"
+                f"No grid recommended — {via['reason']}</div>",
+                unsafe_allow_html=True,
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────
