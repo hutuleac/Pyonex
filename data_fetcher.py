@@ -57,6 +57,14 @@ def _get_bybit() -> ccxt.Exchange:
 # symbol -> exchange name that last succeeded, so we skip repeated Binance misses
 _source_cache: dict[str, str] = {}
 
+# set True on first Binance 451 — skips Binance for all subsequent calls
+_binance_blocked: bool = False
+
+
+def _is_geo_blocked(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "451" in msg or "restricted location" in msg
+
 
 # ─────────────────────────────────────────────────────────────────────
 #  Klines — always returns Binance-style 12-col lists
@@ -64,14 +72,20 @@ _source_cache: dict[str, str] = {}
 #  Downstream CVD falls back to the open/close heuristic when buy vol is 0.
 # ─────────────────────────────────────────────────────────────────────
 def _binance_raw_klines(symbol: str, timeframe: str, limit: int) -> list[list] | None:
+    global _binance_blocked
+    if _binance_blocked:
+        return None
     ex = _get_binance()
-    # bypass unified API to keep the full 12-col array
     market = symbol.replace("/", "").upper()
     try:
         raw = ex.fapiPublicGetKlines({"symbol": market, "interval": timeframe, "limit": limit})
         return raw if isinstance(raw, list) else None
     except Exception as e:  # noqa: BLE001
-        log.info("binance raw klines %s: %s", symbol, e)
+        if _is_geo_blocked(e):
+            _binance_blocked = True
+            log.warning("Binance geo-blocked (451) — switching to Bybit-only for this process")
+        else:
+            log.info("binance raw klines %s: %s", symbol, e)
         return None
 
 
@@ -113,6 +127,9 @@ def fetch_klines(symbol: str, timeframe: str, limit: int) -> list[list]:
 #  Bybit:   /v5/market/open-interest    (intervalTime=4h)
 # ─────────────────────────────────────────────────────────────────────
 def _binance_oi(symbol: str) -> OIData | None:
+    global _binance_blocked
+    if _binance_blocked:
+        return None
     try:
         ex = _get_binance()
         market = symbol.replace("/", "").upper()
@@ -128,7 +145,11 @@ def _binance_oi(symbol: str) -> OIData | None:
         change = (oi_now - oi_old) / oi_old * 100 if oi_old > 0 else 0.0
         return OIData(oiNow=oi_now, oiChange=change)
     except Exception as e:  # noqa: BLE001
-        log.info("binance OI %s: %s", symbol, e)
+        if _is_geo_blocked(e):
+            _binance_blocked = True
+            log.warning("Binance geo-blocked (451) — switching to Bybit-only for this process")
+        else:
+            log.info("binance OI %s: %s", symbol, e)
         return None
 
 
@@ -170,7 +191,11 @@ def fetch_oi(symbol: str) -> OIData:
 #  Funding rate (most recent)
 # ─────────────────────────────────────────────────────────────────────
 def fetch_funding(symbol: str) -> float:
-    for src, getter in (("binance", _get_binance), ("bybit", _get_bybit)):
+    global _binance_blocked
+    sources = (("binance", _get_binance), ("bybit", _get_bybit))
+    for src, getter in sources:
+        if src == "binance" and _binance_blocked:
+            continue
         try:
             ex = getter()
             r = ex.fetch_funding_rate(symbol)
@@ -178,7 +203,11 @@ def fetch_funding(symbol: str) -> float:
             if rate is not None:
                 return float(rate) * 100.0  # to percent
         except Exception as e:  # noqa: BLE001
-            log.info("%s funding %s: %s", src, symbol, e)
+            if src == "binance" and _is_geo_blocked(e):
+                _binance_blocked = True
+                log.warning("Binance geo-blocked (451) — switching to Bybit-only for this process")
+            else:
+                log.info("%s funding %s: %s", src, symbol, e)
     return 0.0
 
 
