@@ -7,8 +7,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from apscheduler.schedulers.background import BackgroundScheduler
-
 from config import CFG, DEFAULT_PAIRS, GRID_CONFIG, LEGENDS, SIG_TIPS
 from grid_calculator import (
     calc_drawdown_scenario,
@@ -91,21 +89,26 @@ st.markdown("""
 
 init_db()
 
-# Background scheduler — runs refresh_data for all default pairs every REFRESH_INTERVAL_SEC.
-# Starts once per process; st.session_state guards against re-registering on reruns.
-if "scheduler_started" not in st.session_state:
+
+@st.cache_resource
+def _start_scheduler():
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from refresh_data import main as _main
+
     def _bg_refresh():
-        from refresh_data import main as _main
         try:
             _main(DEFAULT_PAIRS)
         except Exception:  # noqa: BLE001
             pass
 
-    _sched = BackgroundScheduler(daemon=True)
-    _sched.add_job(_bg_refresh, "interval", seconds=CFG["REFRESH_INTERVAL_SEC"],
-                   id="bg_refresh", replace_existing=True)
-    _sched.start()
-    st.session_state["scheduler_started"] = True
+    sched = BackgroundScheduler(daemon=True)
+    sched.add_job(_bg_refresh, "interval", seconds=CFG["REFRESH_INTERVAL_SEC"],
+                  id="bg_refresh", replace_existing=True)
+    sched.start()
+    return sched
+
+
+_start_scheduler()
 
 
 # ─────────────────────────────────────────────────────────────────────
