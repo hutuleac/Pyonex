@@ -111,3 +111,6 @@ pyonex/
 ## Changelog
 
 - **Range Finder ⚡** — initial Python port from JS engine. Added Donchian (20/55) + squeeze detector. Binance → Bybit fallback. Deployed on Streamlit Community Cloud.
+
+- <img width="952" height="932" alt="image" src="https://github.com/user-attachments/assets/6e714c42-a624-4849-82b7-b71ce0b8a485" />
+
