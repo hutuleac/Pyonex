@@ -7,7 +7,6 @@ taker-buy volume; in that case CVD is approximated with a heuristic.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -73,14 +72,14 @@ def calc_atr(df: pd.DataFrame, period: int = 14) -> float:
     if n < period + 1:
         return 0.0
     h = df["High"].to_numpy()
-    l = df["Low"].to_numpy()
+    lo = df["Low"].to_numpy()
     c = df["Close"].to_numpy()
     tr_sum = 0.0
     for i in range(1, period + 1):
-        tr_sum += max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1]))
+        tr_sum += max(h[i] - lo[i], abs(h[i] - c[i - 1]), abs(lo[i] - c[i - 1]))
     atr = tr_sum / period
     for i in range(period + 1, n):
-        tr = max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1]))
+        tr = max(h[i] - lo[i], abs(h[i] - c[i - 1]), abs(lo[i] - c[i - 1]))
         atr = (atr * (period - 1) + tr) / period
     return atr
 
@@ -159,16 +158,16 @@ def calc_fvg(df: pd.DataFrame, max_gaps: int = 5) -> list[dict]:
     if n < 3:
         return []
     h = df["High"].to_numpy()
-    l = df["Low"].to_numpy()
+    lo = df["Low"].to_numpy()
     last_close = float(df["Close"].iloc[-1])
     gaps: list[dict] = []
     for i in range(1, n - 1):
         # Bullish FVG
-        if l[i + 1] > h[i - 1]:
-            g_bot, g_top = float(h[i - 1]), float(l[i + 1])
+        if lo[i + 1] > h[i - 1]:
+            g_bot, g_top = float(h[i - 1]), float(lo[i + 1])
             intact = True
             for j in range(i + 1, n):
-                if l[j] < g_bot:
+                if lo[j] < g_bot:
                     intact = False
                     break
             if intact:
@@ -180,8 +179,8 @@ def calc_fvg(df: pd.DataFrame, max_gaps: int = 5) -> list[dict]:
                     "idx": i,
                 })
         # Bearish FVG
-        if h[i + 1] < l[i - 1]:
-            g_bot, g_top = float(h[i + 1]), float(l[i - 1])
+        if h[i + 1] < lo[i - 1]:
+            g_bot, g_top = float(h[i + 1]), float(lo[i - 1])
             intact = True
             for j in range(i + 1, n):
                 if h[j] > g_top:
@@ -220,13 +219,13 @@ def calc_adx(df: pd.DataFrame, period: int = 14) -> dict:
     if n < period + 2:
         return {"adx": 0.0, "plusDI": 0.0, "minusDI": 0.0}
     h = df["High"].to_numpy()
-    l = df["Low"].to_numpy()
+    lo = df["Low"].to_numpy()
     c = df["Close"].to_numpy()
     tr_arr, plus_arr, minus_arr = [], [], []
     for i in range(1, n):
-        tr_arr.append(max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1])))
+        tr_arr.append(max(h[i] - lo[i], abs(h[i] - c[i - 1]), abs(lo[i] - c[i - 1])))
         up = h[i] - h[i - 1]
-        dn = l[i - 1] - l[i]
+        dn = lo[i - 1] - lo[i]
         plus_arr.append(up if (up > dn and up > 0) else 0.0)
         minus_arr.append(dn if (dn > up and dn > 0) else 0.0)
     atr_s = sum(tr_arr[:period])

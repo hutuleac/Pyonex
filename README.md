@@ -14,9 +14,9 @@ Streamlit + Plotly dashboard that pulls live Binance/Bybit data, runs the exact 
 
 | File | Role |
 |---|---|
-| `config.py` | CFG, GRID_CONFIG, SIG_TIPS, LEGENDS, default pairs |
+| `config.py` | CFG, GRID_CONFIG, LEGENDS, default pairs |
 | `indicators.py` | RSI, ATR, EMA, POC/AVWAP, CVD, Market Structure, FVG, ADX, MACD, BB, OBV, Fib, Donchian, squeeze detector, aggregator |
-| `grid_calculator.py` | Range / direction / mode / viability / score / profit / drawdown |
+| `grid_calculator.py` | Range / direction / mode / viability / score / profit estimation |
 | `data_fetcher.py` | ccxt Binance primary, Bybit fallback (klines, OI, funding) |
 | `trade_logger.py` | SQLAlchemy models `MetricsCache` + `Trade` (Phase 2) |
 | `refresh_data.py` | Cron entry — fills MetricsCache for every watched pair |

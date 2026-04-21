@@ -10,9 +10,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
-from dataclasses import dataclass
-from typing import Literal
 
 import ccxt
 from dotenv import load_dotenv

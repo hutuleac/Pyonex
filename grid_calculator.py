@@ -237,24 +237,24 @@ def calc_grid_score(m: dict | None) -> dict:
 
     # ADX (max 3.0)
     if adx < 15:
-        adx_score = 3.0; adx_lbl = "ideal range"
+        adx_score, adx_lbl = 3.0, "ideal range"
     elif adx < 20:
-        adx_score = 2.0; adx_lbl = "low"
+        adx_score, adx_lbl = 2.0, "low"
     elif adx < 25:
-        adx_score = 1.0; adx_lbl = "mild"
+        adx_score, adx_lbl = 1.0, "mild"
     else:
-        adx_score = 0.0; adx_lbl = "strong trend"
+        adx_score, adx_lbl = 0.0, "strong trend"
     components.append({"label": "ADX Trend", "score": adx_score, "max": 3.0,
                        "detail": f"ADX {adx:.1f} — {adx_lbl}"})
     score += adx_score
 
     # BB Width (max 2.0)
     if bb_label == "squeeze":
-        bb_score = 2.0; bb_tag = "compressed [ok]"
+        bb_score, bb_tag = 2.0, "compressed [ok]"
     elif bb_label == "normal":
-        bb_score = 1.0; bb_tag = "normal"
+        bb_score, bb_tag = 1.0, "normal"
     else:
-        bb_score = 0.0; bb_tag = "expanded [x]"
+        bb_score, bb_tag = 0.0, "expanded [x]"
     components.append({"label": "BB Width", "score": bb_score, "max": 2.0,
                        "detail": f"{bb_bw:.1f}% — {bb_tag}"})
     score += bb_score
@@ -276,21 +276,21 @@ def calc_grid_score(m: dict | None) -> dict:
         in5 = rl <= poc5d <= rh
         in14 = rl <= poc14d <= rh
         if in5 and in14:
-            poc_score = 2.0; poc_detail = "Both POC5d+14d in range [ok]"
+            poc_score, poc_detail = 2.0, "Both POC5d+14d in range [ok]"
         elif in5 or in14:
-            poc_score = 1.0; poc_detail = "One POC in range [!]"
+            poc_score, poc_detail = 1.0, "One POC in range [!]"
         else:
-            poc_score = 0.0; poc_detail = "No POC in range — grid may miss magnet [x]"
+            poc_score, poc_detail = 0.0, "No POC in range — grid may miss magnet [x]"
     components.append({"label": "POC in Range", "score": poc_score, "max": 2.0, "detail": poc_detail})
     score += poc_score
 
     # RSI neutral (max 1.0) — widened for aggressive crypto posture
     if 35 <= rsi <= 65:
-        rsi_score = 1.0; rsi_tag = "neutral zone [ok]"
+        rsi_score, rsi_tag = 1.0, "neutral zone [ok]"
     elif 28 <= rsi <= 72:
-        rsi_score = 0.5; rsi_tag = "acceptable"
+        rsi_score, rsi_tag = 0.5, "acceptable"
     else:
-        rsi_score = 0.0; rsi_tag = "extreme [x]"
+        rsi_score, rsi_tag = 0.0, "extreme [x]"
     components.append({"label": "RSI Neutral", "score": rsi_score, "max": 1.0,
                        "detail": f"RSI {rsi:.1f} — {rsi_tag}"})
     score += rsi_score

@@ -7,10 +7,8 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from config import CFG, DEFAULT_PAIRS, GRID_CONFIG, LEGENDS, SIG_TIPS
+from config import CFG, DEFAULT_PAIRS, GRID_CONFIG, LEGENDS
 from grid_calculator import (
-    calc_grid_capital_per_grid,
-    calc_grid_profit_per_grid,
     calc_grid_stop_loss,
     calc_grid_take_profit,
 )
@@ -194,16 +192,22 @@ def struct_chip(s: str) -> str:
 
 
 def rsi_color(rsi: float) -> str:
-    if rsi >= 70: return "#ef4444"
-    if rsi >= 60: return "#fbbf24"
-    if rsi <= 30: return "#22d3ee"
-    if rsi <= 40: return "#84cc16"
+    if rsi >= 70:
+        return "#ef4444"
+    if rsi >= 60:
+        return "#fbbf24"
+    if rsi <= 30:
+        return "#22d3ee"
+    if rsi <= 40:
+        return "#84cc16"
     return "#22c55e"
 
 
 def adx_color(adx: float) -> str:
-    if adx >= 25: return "#ef4444"
-    if adx >= 20: return "#fbbf24"
+    if adx >= 25:
+        return "#ef4444"
+    if adx >= 20:
+        return "#fbbf24"
     return "#22c55e"
 
 
@@ -212,8 +216,10 @@ def cvd_color(val: float) -> str:
 
 
 def comp_bar_color(ratio: float) -> str:
-    if ratio >= 0.75: return "#22c55e"
-    if ratio >= 0.4:  return "#eab308"
+    if ratio >= 0.75:
+        return "#22c55e"
+    if ratio >= 0.4:
+        return "#eab308"
     return "#ef4444"
 
 
@@ -318,7 +324,6 @@ def render_symbol(payload: dict, symbol: str) -> None:
     bb_color   = "#22d3ee" if bb_lb == "squeeze" else "#ef4444" if bb_lb == "expanded" else "#f1f5f9"
     flow_color = "#22c55e" if flow > CFG["FLOW_STRONG"] else "#ef4444" if flow < -CFG["FLOW_STRONG"] else "#fbbf24"
     oi_color   = "#22c55e" if oi_ch > 0 else "#ef4444"
-    str_color  = "#22c55e" if str4h == "Bullish" else "#ef4444" if str4h == "Bearish" else "#94a3b8"
     rng_color  = "#22c55e" if direction["type"] == "Long" else "#ef4444" if direction["type"] == "Short" else "#fbbf24"
     fund_color = "#fbbf24" if abs(fund) > 0.05 else "#22c55e"
 
@@ -326,13 +331,8 @@ def render_symbol(payload: dict, symbol: str) -> None:
     ctx_chip_h = context_chip(str4h, adx_v)
     sq_chip_h  = chip("SQUEEZE", "cyan") if sq else ""
 
-    sl           = calc_grid_stop_loss(rng["rangeLow"], prof_name)
-    tp           = calc_grid_take_profit(rng["rangeHigh"], prof_name)
-    profit       = calc_grid_profit_per_grid(
-        rng["rangeHigh"], rng["rangeLow"], grid_count["recommended"],
-        is_geometric=(mode["mode"] == "Geometric"),
-    )
-    cap_per_grid = calc_grid_capital_per_grid(capital, grid_count["recommended"])
+    sl = calc_grid_stop_loss(rng["rangeLow"], prof_name)
+    tp = calc_grid_take_profit(rng["rangeHigh"], prof_name)
 
     # ── Master card (score + viability + recommendation) ──────────
     _act     = direction["type"]
@@ -543,9 +543,12 @@ df_summary = pd.DataFrame(summary).sort_values("Score", ascending=False)
 
 
 def _score_bg(val: float) -> str:
-    if val >= 8:  return "background-color:#052e16;color:#22c55e;font-weight:700"
-    if val >= 6:  return "background-color:#1a2e05;color:#84cc16;font-weight:700"
-    if val >= 4:  return "background-color:#2d2500;color:#eab308;font-weight:700"
+    if val >= 8:
+        return "background-color:#052e16;color:#22c55e;font-weight:700"
+    if val >= 6:
+        return "background-color:#1a2e05;color:#84cc16;font-weight:700"
+    if val >= 4:
+        return "background-color:#2d2500;color:#eab308;font-weight:700"
     return "background-color:#2a0f0f;color:#ef4444;font-weight:700"
 
 

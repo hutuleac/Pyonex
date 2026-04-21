@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The application pulls live Binance/Bybit market data, runs 15+ technical indicators (RSI, ATR, EMA, CVD, POC, ADX, Donchian, Squeeze, etc.), calculates grid-bot profitability, and surfaces actionable trading recommendations. All math is ported from the original JavaScript engine.
 
-**Core value**: Grid trading thrives in lateral (sideways) markets. The dashboard scores each pair 0–10 for grid suitability, picks direction (Long/Short/Neutral), derives an optimal range from ATR, recommends grid count, and estimates drawdown + duration.
+**Core value**: Grid trading thrives in lateral (sideways) markets. The dashboard scores each pair 0–10 for grid suitability, picks direction (Long/Short/Neutral), derives an optimal range from ATR, recommends grid count, and estimates duration.
 
 ## Architecture
 
@@ -17,10 +17,10 @@ The application pulls live Binance/Bybit market data, runs 15+ technical indicat
 | Module | Purpose |
 |--------|---------|
 | `app.py` | Streamlit UI — tabs, metric cards, summary table, live Plotly charts, "copy-to-Pionex" export |
-| `config.py` | Global CFG dict (periods, thresholds), GRID_CONFIG (capital, fees, viability gates), SIG_TIPS (signal explanations), DEFAULT_PAIRS, LEGENDS |
+| `config.py` | Global CFG dict (periods, thresholds), GRID_CONFIG (capital, fees, viability gates), DEFAULT_PAIRS, LEGENDS |
 | `data_fetcher.py` | CCXT wrapper — Binance primary, Bybit fallback. Fetches klines, Open Interest, funding rates. Handles rate limits + retries |
 | `indicators.py` | 15+ indicator calculations (RSI, ATR, EMA, POC, AVWAP, CVD, market structure, FVG, ADX, MACD, BB, OBV, Donchian, squeeze) |
-| `grid_calculator.py` | Range, direction, mode, score, viability assessment, profit/drawdown estimation, grid count logic |
+| `grid_calculator.py` | Range, direction, mode, score, viability assessment, profit estimation, grid count logic |
 | `trade_logger.py` | SQLAlchemy ORM models (`MetricsCache`, `Trade`); database initialization |
 | `refresh_data.py` | Cron entry point — fetches fresh data for all watched pairs, populates MetricsCache |
 | `phases/` | Stubs for Phase 2 (trade logging), Phase 3 (Telegram alerts), Phase 4 (Pionex monitoring) |
@@ -147,7 +147,7 @@ profile = get_ticker_grid_profile(
 ### Adding a New Indicator
 1. Implement in `indicators.py` (follow naming: `calc_<name>`)
 2. Import in `app.py` or `grid_calculator.py`
-3. Update `SIG_TIPS` in `config.py` with user-facing description
+3. Add user-facing description to `config.py` LEGENDS if needed
 4. Integrate into score logic if it feeds the grid recommendation
 
 ## Deployment (Streamlit Community Cloud)
