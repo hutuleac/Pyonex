@@ -256,14 +256,34 @@ def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
 
     # Match bots to our cached metrics
     assessments: list[dict] = []
-    for bot in bots:
-        raw_sym = bot.get("symbol", "")
-        pair = _pionex_symbol_to_pair(raw_sym)
+    for raw_bot in bots:
+        # List endpoint returns BotOrder: base/quote at top level, grid data in buOrderData
+        base = raw_bot.get("base", "")
+        quote = raw_bot.get("quote", "")
+        pair = f"{base}/{quote}" if base and quote else _pionex_symbol_to_pair(raw_bot.get("symbol", ""))
+
+        # Flatten buOrderData into bot dict so bot_advisor can access upperPrice, gridProfit, etc.
+        bot = {**raw_bot}
+        order_data = raw_bot.get("buOrderData") or {}
+        for key in ("upperPrice", "lowerPrice", "gridNum", "gridProfit", "realizedProfit",
+                     "baseAmount", "quoteAmount", "baseInvestment", "quoteInvestment", "perVolume",
+                     "totalCostInBase", "totalCostInQuote"):
+            if key in order_data and key not in bot:
+                bot[key] = order_data[key]
+        # Also check for top/bottom naming (create vs read may differ)
+        if "upperPrice" not in bot and "top" in order_data:
+            bot["upperPrice"] = order_data["top"]
+        if "lowerPrice" not in bot and "bottom" in order_data:
+            bot["lowerPrice"] = order_data["bottom"]
+        if "gridNum" not in bot and "row" in order_data:
+            bot["gridNum"] = order_data["row"]
+
         p = payloads.get(pair, {})
         metrics = p.get("metrics", {})
         signal_info = p.get("signalInfo")
 
         # Inject scores for display
+        metrics = {**metrics}
         metrics["_grid_score"] = p.get("scoreInfo", {}).get("score", 0.0)
         metrics["_setup_score"] = (signal_info or {}).get("score", 0.0)
 

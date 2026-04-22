@@ -8,7 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The application pulls live Binance/Bybit market data, runs 15+ technical indicators (RSI, ATR, EMA, CVD, POC, ADX, Donchian, Squeeze, etc.), calculates grid-bot profitability, and surfaces actionable trading recommendations. All math is ported from the original JavaScript engine.
 
-**Core value**: Grid trading thrives in lateral (sideways) markets. The dashboard scores each pair 0–10 for grid suitability, picks direction (Long/Short/Neutral), derives an optimal range from ATR, recommends grid count, and estimates duration.
+**Three views** (sidebar radio toggle):
+1. **Range Finder** — scores each pair 0–10 for grid suitability using lagging indicators (ADX, BB, CVD, POC, RSI, funding). Picks direction, derives range from ATR, recommends grid count, estimates duration.
+2. **Signal Scanner** — predictive system using 6 leading indicators (CVD divergence, squeeze progression, structure transition, funding/OI imbalance, momentum divergence, volume exhaustion). Detects regime transitions before they happen. Setup Score 0–10 with urgency ranking and ETA.
+3. **Bot Monitor** — connects to Pionex API (read-only, `Bot reading` permission) to show active spot grid bots. Cross-references live bot P&L, range position, and market conditions to generate HOLD/CLOSE/TAKE_PROFIT/WARNING alerts.
 
 ## Architecture
 
@@ -16,32 +19,45 @@ The application pulls live Binance/Bybit market data, runs 15+ technical indicat
 
 | Module | Purpose |
 |--------|---------|
-| `app.py` | Streamlit UI — tabs, metric cards, summary table, live Plotly charts, "copy-to-Pionex" export |
-| `config.py` | Global CFG dict (periods, thresholds), GRID_CONFIG (capital, fees, viability gates), DEFAULT_PAIRS, LEGENDS |
-| `data_fetcher.py` | CCXT wrapper — Binance primary, Bybit fallback. Fetches klines, Open Interest, funding rates. Handles rate limits + retries |
+| `app.py` | Streamlit UI — page router (Range Finder / Signal Scanner / Bot Monitor), metric cards, summary table, charts |
+| `config.py` | CFG, GRID_CONFIG, SIGNAL_CFG, BOT_MONITOR_CFG, DEFAULT_PAIRS, LEGENDS |
+| `data_fetcher.py` | CCXT wrapper — OKX primary, Bybit/Binance fallback. Fetches klines, Open Interest, funding rates |
 | `indicators.py` | 15+ indicator calculations (RSI, ATR, EMA, POC, AVWAP, CVD, market structure, FVG, ADX, MACD, BB, OBV, Donchian, squeeze) |
 | `grid_calculator.py` | Range, direction, mode, score, viability assessment, profit estimation, grid count logic |
+| `signal_engine.py` | 6 leading indicator detectors + scorers + aggregator for the Signal Scanner (Setup Score 0–10) |
+| `signal_scanner.py` | Streamlit UI for Signal Scanner — urgency table, signal detail cards, leading indicator charts |
+| `pionex_client.py` | Pionex Bot API client — HMAC SHA256 auth, list running bots, get bot detail (read-only) |
+| `bot_advisor.py` | Bot health assessment engine — price position, trend alignment, profitability, duration → recommendations |
+| `bot_monitor.py` | Streamlit UI for Bot Monitor — portfolio summary, bot cards with range gauge, P&L, alerts |
 | `trade_logger.py` | SQLAlchemy ORM models (`MetricsCache`, `Trade`); database initialization |
-| `refresh_data.py` | Cron entry point — fetches fresh data for all watched pairs, populates MetricsCache |
-| `phases/` | Stubs for Phase 2 (trade logging), Phase 3 (Telegram alerts), Phase 4 (Pionex monitoring) |
+| `refresh_data.py` | Cron entry point — fetches fresh data, runs indicators + signal engine, populates MetricsCache |
+| `phases/` | Stubs for Phase 2 (trade logging), Phase 3 (Telegram alerts) |
 
 ### Data Flow
 
-1. **Data Refresh** (`refresh_data.py` cron every 5 min)
+1. **Data Refresh** (`refresh_data.py` every 20 min)
    - Fetches 4H klines, OI, funding for each pair
-   - Runs all 15+ indicators
-   - Caches results in SQLite `MetricsCache` table
+   - Runs all 15+ indicators via `get_advanced_metrics()`
+   - Runs `calc_grid_score()` → Grid Score (lagging, 0–10)
+   - Runs `calc_setup_score()` → Setup Score (leading, 0–10) via `signal_engine.py`
+   - Caches full payload (metrics + scoreInfo + signalInfo) in SQLite `MetricsCache`
 
-2. **Dashboard Load** (`app.py` on page refresh)
+2. **Range Finder** (`app.py` default page)
    - Reads cached metrics from SQLite
-   - Calculates grid recommendations via `grid_calculator.py`
-   - Renders tabs: Summary, Pair Explorer, Charts, Advanced
+   - Renders per-pair cards with grid setup, spot trade setup, indicator pills, score breakdown
+   - Spot Trade Setup direction is tightened: Signal Scanner direction overrides naive structure logic
 
-3. **Grid Scoring & Recommendation**
-   - ADX, BB, CVD, POC, RSI, funding rates feed into `calc_grid_score()`
-   - Viability gates check ADX/RSI/BB thresholds
-   - Direction determined by market structure (4H) + score
-   - Range derived from ATR%; mode (Arithmetic vs Geometric) based on volatility
+3. **Signal Scanner** (`signal_scanner.py`)
+   - Reads `signalInfo` from cached payload
+   - Urgency ranking table → signal detail cards → component bars → recommendation boxes
+   - Plotly charts for BB bandwidth + CVD series
+   - Cross-reference table: Grid Score vs Setup Score
+
+4. **Bot Monitor** (`bot_monitor.py`)
+   - Fetches active spot grid bots from Pionex API (`pionex_client.py`)
+   - Matches bots to cached metrics by symbol
+   - Runs `assess_bot_health()` → HOLD/CLOSE/TAKE_PROFIT/WARNING/REVIEW
+   - Renders portfolio summary, alert summary, per-bot cards with range gauge + P&L
 
 ### Technology Stack
 
@@ -160,12 +176,22 @@ Hosted at [share.streamlit.io](https://share.streamlit.io). Single service — n
 - SQLite (`pyonex.db`) lives in the system temp dir (`tempfile.gettempdir()`). Cache resets on redeployment; this is acceptable for a metrics cache.
 
 **Secrets (set in Streamlit Cloud UI → Advanced settings → Secrets):**
-- Optional: `BINANCE_API_KEY`, `BINANCE_API_SECRET` (higher rate limits)
-- Optional: `BYBIT_API_KEY`, `BYBIT_API_SECRET` (Bybit fallback)
-- Optional: `PYONEX_LOG_LEVEL` (defaults to `INFO`)
-- `PYONEX_DB_PATH` is not needed — `trade_logger.py` defaults to `tempfile.gettempdir()/pyonex.db`
+```toml
+# Exchange data (optional — public endpoints work without keys)
+BINANCE_API_KEY = ""
+BINANCE_API_SECRET = ""
+BYBIT_API_KEY = ""
+BYBIT_API_SECRET = ""
 
-Secrets are read via `os.getenv()` — no code changes needed between local `.env` and Streamlit Cloud.
+# Pionex Bot Monitor (required for Bot Monitor page)
+PIONEX_API_KEY = "your_key"
+PIONEX_API_SECRET = "your_secret"
+
+PYONEX_LOG_LEVEL = "INFO"
+```
+
+Pionex keys need `Bot reading` permission only. Create at https://www.pionex.com/my-account/api.
+Secrets are read via `st.secrets` (primary) with `os.getenv()` fallback for local `.env` files.
 
 ## Testing Strategy
 
@@ -176,14 +202,14 @@ No test suite yet. When adding tests:
 
 Mock `ccxt` and database in unit tests; use real data fixtures for integration tests.
 
-## Phases & Future Work
+## Phases & Status
 
-- **Phase 1 (✓ done)** — indicators, grid calc, Streamlit dashboard, SQLite, Streamlit Cloud deploy
+- **Phase 1 (done)** — indicators, grid calc, Streamlit dashboard, SQLite, Streamlit Cloud deploy
+- **Phase 1.5 (done)** — Signal Scanner (predictive leading indicators, Setup Score 0–10)
+- **Phase 1.6 (done)** — Bot Monitor (Pionex API read-only, active bot health alerts)
+- **Phase 1.7 (done)** — Spot Trade Setup tightened (Signal Scanner direction overrides naive structure)
 - **Phase 2** — "Log New Trade" UI + monitored-trade table + close recommendations
-- **Phase 3** — Telegram alerts on STRONG SETUP transitions
-- **Phase 4** — Pionex read-only monitor; re-recommend on trend change
-
-Phase stub files exist in `phases/` but are not yet integrated.
+- **Phase 3** — Telegram alerts on STRONG SETUP / bot alert transitions
 
 ## Common Debugging
 

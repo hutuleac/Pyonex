@@ -1,4 +1,9 @@
-"""Pionex Bot API client — read-only access to spot grid bots."""
+"""Pionex Bot API client — read-only access to spot grid bots.
+
+Auth reference: https://www.pionex.com/docs/api-docs/bot-api/general-info/authentication
+Signing: sort params alphabetically, join with &, prepend METHOD+PATH+?, HMAC SHA256.
+Values in the signature string must NOT be URL-encoded.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +11,6 @@ import hmac
 import logging
 import os
 import time
-from urllib.parse import urlencode
 
 import requests
 
@@ -40,10 +44,11 @@ class PionexClient:
     def _sign(self, method: str, path: str, params: dict) -> tuple[dict, str]:
         ts = str(int(time.time() * 1000))
         params["timestamp"] = ts
-        # Sort params alphabetically for consistent signature
-        sorted_params = sorted(params.items())
-        qs = urlencode(sorted_params)
-        # Signature: METHOD + PATH + ? + QUERY_STRING
+        # Sort alphabetically by key, join as key=value with &
+        # Per docs: "signature related value must not be URL-encoded"
+        sorted_keys = sorted(params.keys())
+        qs = "&".join(f"{k}={params[k]}" for k in sorted_keys)
+        # Sign string: METHOD + PATH + ? + sorted_query (no space, no encoding)
         sign_str = f"{method}{path}?{qs}"
         sig = hmac.new(
             self.api_secret.encode(), sign_str.encode(), hashlib.sha256,
@@ -51,7 +56,6 @@ class PionexClient:
         headers = {
             "PIONEX-KEY": self.api_key,
             "PIONEX-SIGNATURE": sig,
-            "Content-Type": "application/json",
         }
         return headers, qs
 
@@ -60,6 +64,7 @@ class PionexClient:
         params = {k: v for k, v in (params or {}).items() if v is not None}
         headers, qs = self._sign("GET", path, params)
         url = f"{_BASE}{path}?{qs}"
+        log.debug("Pionex GET %s", url)
         try:
             resp = requests.get(url, headers=headers, timeout=15)
             resp.raise_for_status()
@@ -78,12 +83,11 @@ class PionexClient:
         if not self.configured:
             self.last_error = "API keys not configured"
             return []
-        # API param is buOrderTypes (plural), value is spot_grid (underscore)
-        data = self._get("/api/v1/bot/orders", {
-            "status": "running",
-            "buOrderTypes": "spot_grid",
-        })
-        return data.get("orders", [])
+        # First try: fetch all running bots (no type filter), filter client-side
+        data = self._get("/api/v1/bot/orders", {"status": "running"})
+        all_bots = data.get("results", [])
+        # Filter to spot_grid only
+        return [b for b in all_bots if b.get("buOrderType") == "spot_grid"]
 
     def get_bot_detail(self, order_id: str) -> dict:
         if not self.configured:
