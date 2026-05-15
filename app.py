@@ -17,6 +17,8 @@ from refresh_data import refresh_one
 from bot_monitor import render_bot_monitor
 from signal_scanner import render_signal_scanner
 from trade_logger import all_latest, init_db, latest_metrics
+from trade_monitor import render_trade_monitor
+from trade_simulator import open_trade
 
 st.set_page_config(
     page_title="Range Finder",
@@ -279,7 +281,7 @@ with st.sidebar:
 
     st.divider()
     page = st.radio(
-        "View", ["Range Finder", "Signal Scanner", "Bot Monitor"],
+        "View", ["Range Finder", "Signal Scanner", "Bot Monitor", "Trade Monitor"],
         horizontal=True, label_visibility="collapsed",
     )
 
@@ -534,6 +536,30 @@ def render_symbol(payload: dict, symbol: str) -> None:
             language="text",
         )
 
+    # ── Simulate Trade ─────────────────────────────────────────────
+    if via["viable"]:
+        with st.expander("Simulate this grid trade", expanded=False):
+            sim_c1, sim_c2, sim_c3 = st.columns([2, 2, 1])
+            sim_capital = sim_c1.number_input(
+                "Capital (USDT, optional)", min_value=0.0, value=float(capital), step=50.0,
+                key=f"sim_cap_{symbol}",
+            )
+            sim_profile = sim_c2.selectbox(
+                "Profile", ["stable", "moderate", "volatile"], index=1,
+                key=f"sim_prof_{symbol}",
+            )
+            if sim_c3.button("Start", key=f"sim_btn_{symbol}", type="primary", use_container_width=True):
+                payload_for_sim = latest_metrics(symbol)
+                if payload_for_sim is not None:
+                    tid = open_trade(
+                        payload_for_sim.payload, symbol,
+                        sim_capital if sim_capital > 0 else None,
+                        sim_profile,
+                    )
+                    st.success(f"Trade #{tid} opened — track it in Trade Monitor.")
+                else:
+                    st.error("No cached data for this pair.")
+
     st.divider()
 
 
@@ -562,6 +588,11 @@ if page == "Signal Scanner":
 # ── Bot Monitor page ─────────────────────────────────────────────────
 if page == "Bot Monitor":
     render_bot_monitor(selected, payloads)
+    st.stop()
+
+# ── Trade Monitor page ───────────────────────────────────────────────
+if page == "Trade Monitor":
+    render_trade_monitor(selected, payloads)
     st.stop()
 
 # ── Summary table with conditional styling ─────────────────────────
@@ -633,9 +664,8 @@ for sym in sorted(payloads, key=lambda s: payloads[s]["scoreInfo"]["score"], rev
 with st.expander("Summary table", expanded=False):
     st.dataframe(styled, use_container_width=True, hide_index=True)
 
-with st.expander("Phases 2–4 (not active)"):
+with st.expander("Phases 3–4 (not active)"):
     st.markdown(
-        "- **Phase 2** — trade logger UI + live P&L monitor\n"
         "- **Phase 3** — Telegram alerts on strong setups\n"
         "- **Phase 4** — Pionex active-trade monitor + re-recommend on trend flip"
     )
